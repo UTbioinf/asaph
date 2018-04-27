@@ -28,6 +28,7 @@ import numpy as np
 import seaborn
 
 from sklearn.cluster import k_means
+from sklearn.decomposition import NMF
 from sklearn.decomposition import PCA
 from sklearn.externals import joblib
 from sklearn.linear_model import SGDClassifier
@@ -52,9 +53,15 @@ def train(args):
         os.makedirs(models_dir)
 
     features = read_features(workdir)
-        
-    pca = PCA(n_components = args.n_components,
-              whiten = True)
+
+    if args.model_type == "PCA":
+        pca = PCA(n_components = args.n_components,
+                  whiten = True)
+    elif args.model_type == "NMF":
+        pca = NMF(n_components = args.n_components)
+    else:
+        raise Exception("Unknown model type %s" % args.model_type)
+    
     projections = pca.fit_transform(features.feature_matrix)
 
     model = { MODEL_KEY : pca,
@@ -240,34 +247,75 @@ def output_coordinates(args):
             line.extend(map(str, selected[i, :]))
             fl.write("\t".join(line))
             fl.write("\n")
-
-def analyze_weights(args):
+            
+def output_loading_magnitudes(args):
     workdir = args.workdir
 
-    figures_dir = os.path.join(workdir, "figures")
-    if not os.path.exists(figures_dir):
-        os.makedirs(figures_dir)
+    analysis_dir = os.path.join(workdir, "analysis")
+    if not os.path.exists(analysis_dir):
+        os.makedirs(analysis_dir)
     
-    project_summary = deserialize(os.path.join(workdir,
-                                               PROJECT_SUMMARY_FLNAME))
+    data_model = read_features(workdir)
 
     model_fl = os.path.join(workdir,
                             "models",
                             "pca.pkl")
     model = joblib.load(model_fl)    
     pca = model[MODEL_KEY]
-    
-    for i, w in enumerate(args.weights):
-        plt.clf()
-        seaborn.distplot(w * pca.components_[i, :],
-                         kde=False)
-        plt.xlabel("Feature Weights", fontsize=16)
-        plt.ylabel("Count(Features)", fontsize=16)
-        plot_fl = os.path.join(figures_dir,
-                               "pca_feature_weights_pc%s.png" % i)
-        plt.savefig(plot_fl,
-                    DPI=300)
+    components = pca.components_
+    selected = components[args.components, :]
 
+    output_fl = os.path.join(analysis_dir, "pca_loading_magnitudes.tsv")
+    with open(output_fl, "w") as fl:
+        header = ["chromosome", "position"]
+        header.extend(map(str, args.components))
+        fl.write("\t".join(header))
+        fl.write("\n")
+        for i, pair in enumerate(data_model.snp_feature_map.iteritems()):
+            snp_label, feature_idx = pair
+            chrom, pos = snp_label
+
+            features = selected[:, feature_idx]
+            norms = np.sqrt(np.sum(features**2, axis=1))
+            
+            fl.write("%s\t%s\t" % (chrom, pos))
+            fl.write("\t".join(map(str, norms)))
+            fl.write("\n")
+
+def output_loading_factors(args):
+    workdir = args.workdir
+
+    analysis_dir = os.path.join(workdir, "analysis")
+    if not os.path.exists(analysis_dir):
+        os.makedirs(analysis_dir)
+    
+    data_model = read_features(workdir)
+
+    model_fl = os.path.join(workdir,
+                            "models",
+                            "pca.pkl")
+    model = joblib.load(model_fl)    
+    pca = model[MODEL_KEY]
+    components = pca.components_
+    selected = components[args.components, :]
+
+    output_fl = os.path.join(analysis_dir, "pca_loading_factors.tsv")
+    with open(output_fl, "w") as fl:
+        header = ["chromosome", "position", "dummy variable"]
+        header.extend(map(str, args.components))
+        fl.write("\t".join(header))
+        fl.write("\n")
+        for i, pair in enumerate(data_model.snp_feature_map.iteritems()):
+            snp_label, feature_idx = pair
+            chrom, pos = snp_label
+
+            for j, idx in enumerate(feature_idx):
+                features = selected[:, idx]
+            
+                fl.write("%s\t%s\t%s\t" % (chrom, pos, j))
+                fl.write("\t".join(map(str, features)))
+                fl.write("\n")
+            
 def pop_association_tests(args):
     workdir = args.workdir
 
@@ -373,8 +421,16 @@ def snp_association_tests(args):
                 chrom, pos = snp_label
 
                 snp_features = data_model.feature_matrix[:, feature_idx]
-                n_copies, class_labels, imputed_projections = generate_training_set(snp_features,
-                                                                                    projections[:, pc])
+
+                # we want to split into positive and negative coordinates
+                # to get both sides of the "switch"
+                # first calculate with positive coordinates
+
+                pos_projections = projections[:, pc].copy()
+                pos_projections[pos_projections < 0.0] = 0.0
+                triplet = generate_training_set(snp_features,
+                                                pos_projections)
+                n_copies, class_labels, imputed_projections = triplet
 
                 imputed_projections = imputed_projections.reshape(-1, 1)
 
@@ -382,19 +438,39 @@ def snp_association_tests(args):
                 # we need to scale the log loss so that it is correct for
                 # the original sample size
                 try:
-                    p_value = likelihood_ratio_test(imputed_projections,
-                                                    class_labels,
-                                                    lr,
-                                                    g_scaling_factor = 1.0 / n_copies)
+                    pos_p_value = likelihood_ratio_test(imputed_projections,
+                                                        class_labels,
+                                                        lr,
+                                                        g_scaling_factor = 1.0 / n_copies)
                 # in case of underflow or overflow in a badly-behaving model
                 except ValueError:
-                    p_value = 1.0
-                
+                    pos_p_value = 1.0
+
+                neg_projections = projections[:, pc].copy()
+                neg_projections[neg_projections > 0.0] = 0.0
+                triplet = generate_training_set(snp_features,
+                                                neg_projections)
+                n_copies, class_labels, imputed_projections = triplet
+
+                imputed_projections = imputed_projections.reshape(-1, 1)
+
+                # since we make multiple copies of the original samples,
+                # we need to scale the log loss so that it is correct for
+                # the original sample size
+                try:
+                    neg_p_value = likelihood_ratio_test(imputed_projections,
+                                                        class_labels,
+                                                        lr,
+                                                        g_scaling_factor = 1.0 / n_copies)
+                # in case of underflow or overflow in a badly-behaving model
+                except ValueError:
+                    neg_p_value = 1.0
+                    
                 if i == next_output:
-                    print i, "SNP", snp_label, "and PC", pc, "has p-value", p_value
+                    print i, "SNP", snp_label, "and PC", pc, "has p-values", pos_p_value, neg_p_value
                     next_output *= 2
 
-                fl.write("\t".join([chrom, pos, str(p_value)]))
+                fl.write("\t".join([chrom, pos, str(pos_p_value), str(neg_p_value)]))
                 fl.write("\n")
 
 def sweep_clusters(args):
@@ -494,6 +570,12 @@ def parseargs():
                               type=int,
                               required=True,
                               help="Number of PCs to compute")
+
+    train_parser.add_argument("--model-type",
+                              type=str,
+                              choices=["PCA",
+                                       "NMF"],
+                              default="PCA")
     
     eva_parser = subparsers.add_parser("explained-variance-analysis",
                                        help="Compute explained variances of PCs")
@@ -542,14 +624,23 @@ def parseargs():
                               required=True,
                               help="Minimum explained variance")
 
-    weight_analysis_parser = subparsers.add_parser("analyze-weights",
-                                                   help="Plot component weight distributions")
+    loading_magnitudes_parser = subparsers.add_parser("output-loading-magnitudes",
+                                                      help="Output loading magnitudes")
 
-    weight_analysis_parser.add_argument("--weights",
-                                        type=float,
+    loading_magnitudes_parser.add_argument("--components",
+                                           type=int,
+                                           nargs="+",
+                                           required=True,
+                                           help="Components to output")
+    
+    loading_factors_parser = subparsers.add_parser("output-loading-factors",
+                                                   help="Output loading factors")
+
+    loading_factors_parser.add_argument("--components",
+                                        type=int,
                                         nargs="+",
                                         required=True,
-                                        help="Component weights")
+                                        help="Components to output")
 
     snp_association_parser = subparsers.add_parser("snp-association-tests",
                                                    help="Run association tests on PCs vs SNPs")
@@ -607,8 +698,10 @@ if __name__ == "__main__":
         output_coordinates(args)
     elif args.mode == "min-components-explained-variance":
         min_components_explained_variance(args)
-    elif args.mode == "analyze-weights":
-        analyze_weights(args)
+    elif args.mode == "output-loading-magnitudes":
+        output_loading_magnitudes(args)
+    elif args.mode == "output-loading-factors":
+        output_loading_factors(args)
     elif args.mode == "extract-genotypes":
         extract_genotypes(args)
     elif args.mode == "pop-association-tests":
