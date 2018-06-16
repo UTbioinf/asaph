@@ -184,6 +184,75 @@ load model_setup_helper
     [ -e "${COUNTS_WORKDIR_PATH}/analysis/clusters_2.tsv" ]
 }
 
+@test "pca (integers)" {
+    run ${BATS_TEST_DIRNAME}/../bin/pca \
+        --workdir ${INTS_WORKDIR_PATH} \
+        train \
+        --n-components 6
+
+    [ "$status" -eq 0 ]
+    [ -e "${INTS_WORKDIR_PATH}/models/pca.pkl" ]
+
+    run ${BATS_TEST_DIRNAME}/../bin/pca \
+	    --workdir ${INTS_WORKDIR_PATH} \
+        explained-variance-analysis
+
+    [ "$status" -eq 0 ]
+    [ -e "${INTS_WORKDIR_PATH}/figures/pca_explained_variance_ratios.png" ]
+
+    run ${BATS_TEST_DIRNAME}/../bin/pca \
+	    --workdir ${INTS_WORKDIR_PATH} \
+        plot-projections \
+        --pairs 1 2 3 4
+
+    [ "$status" -eq 0 ]
+    [ -e "${INTS_WORKDIR_PATH}/figures/pca_projection_1_2.png" ]
+    [ -e "${INTS_WORKDIR_PATH}/figures/pca_projection_3_4.png" ]
+
+    run ${BATS_TEST_DIRNAME}/../bin/pca \
+	    --workdir ${INTS_WORKDIR_PATH} \
+        output-coordinates \
+        --selected-components 1 2 3 4 \
+        --output-fl ${INTS_WORKDIR_PATH}/pca_coordinates.txt
+
+    [ "$status" -eq 0 ]
+    [ -e "${INTS_WORKDIR_PATH}/pca_coordinates.txt" ]
+
+    run ${BATS_TEST_DIRNAME}/../bin/pca \
+	    --workdir ${INTS_WORKDIR_PATH} \
+        analyze-weights \
+        --weights 1.0 1.0
+
+    [ "$status" -eq 0 ]
+    [ -e "${INTS_WORKDIR_PATH}/figures/pca_feature_weights_pc1.png" ]
+    [ -e "${INTS_WORKDIR_PATH}/figures/pca_feature_weights_pc2.png" ]
+
+    run ${BATS_TEST_DIRNAME}/../bin/pca \
+	    --workdir ${INTS_WORKDIR_PATH} \
+        pop-association-tests
+
+    [ "$status" -eq 0 ]
+    [ -e "${INTS_WORKDIR_PATH}/analysis/population_pca_association_tests.tsv" ]
+
+    run ${BATS_TEST_DIRNAME}/../bin/pca \
+	    --workdir ${INTS_WORKDIR_PATH} \
+        sweep-clusters \
+        --components 1 2 \
+        --n-clusters 2 4 6 8
+    
+    [ "$status" -eq 0 ]
+    [ -e "${INTS_WORKDIR_PATH}/figures/cluster_inertia_1_2.png" ]
+
+    run ${BATS_TEST_DIRNAME}/../bin/pca \
+	    --workdir ${INTS_WORKDIR_PATH} \
+        cluster-samples \
+        --components 0 1 \
+        --n-clusters 2
+    
+    [ "$status" -eq 0 ]
+    [ -e "${INTS_WORKDIR_PATH}/analysis/clusters_2.tsv" ]
+}
+
 @test "nmf (categories)" {
     run ${BATS_TEST_DIRNAME}/../bin/pca \
         --workdir ${WORKDIR_PATH} \
@@ -262,7 +331,6 @@ load model_setup_helper
     [ "$status" -eq 0 ]
     [ -e "${WORKDIR_PATH}/analysis/clusters_2.tsv" ]
 }
-
 
 @test "Find min components to achieve explained variance threshold (categories)" {
     run ${BATS_TEST_DIRNAME}/../bin/pca \

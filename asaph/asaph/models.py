@@ -32,6 +32,7 @@ ProjectSummary = namedtuple("ProjectSummary",
 
 COUNTS_FEATURE_TYPE = "counts"
 CATEGORIES_FEATURE_TYPE = "categories"
+INTS_FEATURE_TYPE = "integers"
 
 class SNPs(object):
     def __init__(self, labels, importances, ranked):

@@ -10,6 +10,7 @@ setup() {
     export PHENO_PATH="${TEST_TEMP_DIR}/phenotypes.txt"
     export WORKDIR_PATH="${TEST_TEMP_DIR}/workdir"
     export COUNTS_WORKDIR_PATH="${TEST_TEMP_DIR}/counts_workdir"
+    export INTS_WORKDIR_PATH="${TEST_TEMP_DIR}/ints_workdir"
 
     ${BATS_TEST_DIRNAME}/../bin/generate_data \
 			            --seed 1234 \
@@ -32,6 +33,12 @@ setup() {
 			            --vcf ${VCF_PATH} \
 			            --populations ${POPS_PATH} \
 			            --feature-type counts
+
+    ${BATS_TEST_DIRNAME}/../bin/import \
+			            --workdir ${INTS_WORKDIR_PATH} \
+			            --vcf ${VCF_PATH} \
+			            --populations ${POPS_PATH} \
+			            --feature-type integers
 }
 
 teardown() {

@@ -26,6 +26,7 @@ from newioutils import *
 from models import ProjectSummary
 from models import COUNTS_FEATURE_TYPE
 from models import CATEGORIES_FEATURE_TYPE
+from models import INTS_FEATURE_TYPE
 
 DEFAULT_COLUMNS = {'CHROM' : 0, 'POS' : 1, 'ID' : 2, 'REF' : 3, 'ALT' : 4, 'QUAL' : 5, 'FILTER' : 6, 'INFO' : 7, 'FORMAT' : 8}
 
@@ -171,6 +172,23 @@ class CountFeaturesExtractor(object):
             yield (chrom, pos, alleles[0]), tuple(ref_column)
             yield (chrom, pos, alleles[1]), tuple(alt_column)
 
+class IntegerFeaturesExtractor(object):
+    def __init__(self, stream):
+        self.stream = stream
+
+    def __iter__(self):
+        for variant_label, alleles, genotypes in self.stream:
+            chrom, pos = variant_label
+            column = [0.] * len(genotypes)
+
+            for row_idx, allele_counts in enumerate(genotypes):
+                if allele_counts == (2, 0):
+                    column[row_idx] = -1
+                elif allele_counts == (0, 2):
+                    column[row_idx] = 1
+
+            yield (chrom, pos, None), tuple(column)
+            
 class CategoricalFeaturesExtractor(object):
     def __init__(self, stream):
         self.stream = stream
@@ -222,6 +240,8 @@ def convert(groups_flname, vcf_flname, outbase, compress, feature_type, compress
         extractor = CountFeaturesExtractor(filtered_positions_counter)
     elif feature_type == CATEGORIES_FEATURE_TYPE:
         extractor = CategoricalFeaturesExtractor(filtered_positions_counter)
+    elif feature_type == INTS_FEATURE_TYPE:
+        extractor = IntegerFeaturesExtractor(filtered_positions_counter)
     else:
         raise Exception, "Unknown feature type: %s" % feature_type
 

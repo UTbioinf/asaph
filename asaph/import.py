@@ -71,7 +71,9 @@ def parseargs():
     parser.add_argument("--compress", action="store_true")
 
     parser.add_argument("--feature-type",
-                        choices=["categories", "counts"],
+                        choices=["categories",
+                                 "counts",
+                                 "integers"],
                         default="counts",
                         help="Feature representation to use")
     

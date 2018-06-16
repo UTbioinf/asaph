@@ -67,6 +67,26 @@ setup() {
     [ $(count_snp_feature_indices ${WORKDIR_PATH}) -eq ${N_FEATURE_INDICES} ]
 }
 
+@test "Import data: vcf.gz, dna, integers" {
+    run ${IMPORT_CMD} \
+	    --workdir ${WORKDIR_PATH} \
+	    --vcf-gz ${VCF_GZ_PATH} \
+	    --populations ${POPS_PATH} \
+	    --feature-type integers
+
+    N_FEATURE_INDICES="$N_SNPS"
+
+    [ "$status" -eq 0 ]
+    [ -e "${WORKDIR_PATH}" ]
+    [ -d "${WORKDIR_PATH}" ]
+    [ -e "${WORKDIR_PATH}/project_summary" ]
+    [ -e "${WORKDIR_PATH}/feature_matrix.npy" ]
+    [ -e "${WORKDIR_PATH}/snp_feature_genotypes" ]
+    [ $(count_snps ${WORKDIR_PATH}) -eq ${N_SNPS} ]
+    [ $(count_samples ${WORKDIR_PATH}) -eq ${N_INDIVIDUALS} ]
+    [ $(count_snp_feature_indices ${WORKDIR_PATH}) -eq ${N_FEATURE_INDICES} ]
+}
+
 @test "Import data: vcf.gz, dna, counts, feature_compression" {
     run ${IMPORT_CMD} \
 	    --workdir ${WORKDIR_PATH} \
@@ -97,6 +117,27 @@ setup() {
 	    --compress
 
     N_FEATURE_INDICES=$((N_SNPS * 3))
+
+    [ "$status" -eq 0 ]
+    [ -e "${WORKDIR_PATH}" ]
+    [ -d "${WORKDIR_PATH}" ]
+    [ -e "${WORKDIR_PATH}/project_summary" ]
+    [ -e "${WORKDIR_PATH}/feature_matrix.npy.npz" ]
+    [ -e "${WORKDIR_PATH}/snp_feature_genotypes" ]
+    [ $(count_snps ${WORKDIR_PATH}) -eq ${N_SNPS} ]
+    [ $(count_samples ${WORKDIR_PATH}) -eq ${N_INDIVIDUALS} ]
+    [ $(count_snp_feature_indices ${WORKDIR_PATH}) -eq ${N_FEATURE_INDICES} ]
+}
+
+@test "Import data: vcf.gz, dna, integers, feature_compression" {
+    run ${IMPORT_CMD} \
+	    --workdir ${WORKDIR_PATH} \
+	    --vcf-gz ${VCF_GZ_PATH} \
+	    --populations ${POPS_PATH} \
+	    --feature-type integers \
+	    --compress
+
+    N_FEATURE_INDICES="$N_SNPS"
 
     [ "$status" -eq 0 ]
     [ -e "${WORKDIR_PATH}" ]
